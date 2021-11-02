@@ -1,0 +1,206 @@
+
+IMPORT PACKAGES
+```{r}
+#Library 
+library(dplyr)
+library(tidytext)
+library(tidyr)
+library(tm)
+library(plotly)
+library(wordcloud)
+library(wordcloud2)
+library(SnowballC)
+library(stringr)
+library(reshape2)
+library(ggplot2) 
+library(NLP) 
+library(RColorBrewer) 
+library(syuzhet)
+```
+
+READ DATASET
+```{r}
+#read data
+setwd("D:/Users/Acer User/Documents")
+asian <- read.csv("asian.csv")
+western <- read.csv("western.csv")
+```
+
+DATA PRE-PROCESSING
+```{r}
+#REMOVE DUPLICATION
+#remove duplication
+distinct(asian,.keep_all=TRUE)
+distinct(western,.keep_all=TRUE)
+
+
+#To check the number of missing values
+sapply(asian, function(x) sum(is.na(x)))
+sapply(western, function(x) sum(is.na(x)))
+
+
+#remove unknown column like X, X.1, X.2 
+western <- western[,c(1,2,3,4,5,6,7)]
+sapply(western, function(x) sum(is.na(x)))
+
+
+#Error cannot allocate vector of 1.3gb
+memory.limit(size=56000)
+
+
+
+```
+
+
+
+```{r}
+asian <- asian$Text
+asian=gsub("&amp","",asian)
+asian=gsub("(RT|via)((?:\\b\\w*@\\w+)+)","",asian)
+asian=gsub("@\\w+","",asian)
+asian=gsub("[[:punct:]]","",asian)
+asian=gsub("[[:digit:]]","",asian)
+asian=gsub("http\\w+","",asian)
+asian=gsub("[ \t]{2,}","",asian)
+asian=gsub("^\\s+|\\s+$","",asian)
+asian=iconv(asian,"UTF-8","ASCII",sub="")
+```
+
+```{r}
+#Get rid of unnecessary space
+asian <- str_replace_all(asian," "," ")
+#Take out retweet header
+asian <- str_replace_all(asian,"RT @[a-z,A-Z,]*: "," ")
+#Get rid of hastags
+asian <- str_replace_all(asian, "#[a-z,A-Z]*"," ")
+#Get rid of references to other screennames
+asian <- str_replace_all(asian, "@[a-z,A-Z]*"," ")
+```
+
+
+CREATE ASIAN CORPUS
+```{r}
+corpus_asian <- Corpus(VectorSource(asian)) %>%
+  tm_map(tolower) %>% 
+  tm_map(removePunctuation) %>% 
+  tm_map(removeNumbers) %>% 
+  
+  tm_map(stemDocument) %>%
+  tm_map(removeWords, c(stopwords('en'),'airbnb','hous','get','experi','tokyo','japan','now','just','can','via','shinjuku','nogata','airbnbtokyo','airbnbjapan','timeouttokyo','cherri','airbnbmalaysia','kakigori','wagashi','rtgot'))
+   
+```
+
+
+BUILD ASIAN DOCUMENT MATIRX
+
+```{r}
+#Building term document matrix
+dtm_asian <- TermDocumentMatrix(corpus_asian)
+dtm_asian_a <- as.matrix(dtm_asian)
+dtm_asian_v <- sort(rowSums(dtm_asian_a),decreasing=TRUE)
+dtm_asian_d <- data.frame(word=names(dtm_asian_v), freq=dtm_asian_v)
+head(dtm_asian_d,15)
+
+#Plot most frequency words
+x <- barplot(dtm_asian_d[1:10,]$freq, las=2,names.arg=dtm_asian_d[1:10,]$word,
+        col='lightblue',main="Top 10 most frequent words",
+        ylab="Word frequencies")
+
+#Generate word cloud
+set.seed(5000)
+wordcloud(words=dtm_asian_d$word, freq=dtm_asian_d$freq,
+          min.freq = 5,max.words = 500,
+          random.order = FALSE, rot.per = 0.25,
+          colors=brewer.pal(8,"Dark2"))
+
+```
+
+
+```{r}
+findAssocs(dtm_asian,terms=c("book","clean","travel","stay","price","room","locat","comfort","safe"),corlimit=0.30)
+
+```
+
+
+```{r}
+findAssocs(dtm_asian,terms=c("comfort","safe"),corlimit=0.30)
+```
+
+
+
+WESTERN DATASET
+```{r}
+#Western dataset
+western <- read.csv("western.csv")
+western <- western$Text
+```
+
+
+
+
+```{r}
+western=gsub("&amp","",western)
+western=gsub("&amp","",western)
+western=gsub("(RT|via)((?:\\b\\w*@\\w+)+)","",western)
+western=gsub("@\\w+","",western)
+western=gsub("[[:punct:]]","",western)
+western=gsub("[[:digit:]]","",western)
+western=gsub("http\\w+","",western)
+western=gsub("[ \t]{2,}","",western)
+western=gsub("^\\s+|\\s+$","",western)
+western=iconv(western,"UTF-8","ASCII",sub="")
+```
+
+```{r}
+#Get rid of unnecessary space
+western <- str_replace_all(western," "," ")
+#Take out retweet header
+western <- str_replace_all(western,"RT @[a-z,A-Z,]*: "," ")
+#Get rid of hastags
+western <- str_replace_all(western, "#[a-z,A-Z]*"," ")
+#Get rid of references to other screennames
+western <- str_replace_all(western, "@[a-z,A-Z]*"," ")
+```
+
+WESTERN CORPUS
+```{r}
+corpus_western <- Corpus(VectorSource(western)) %>%
+  tm_map(tolower) %>% 
+  tm_map(removePunctuation) %>% 
+  tm_map(removeNumbers) %>% 
+  tm_map(stripWhitespace) %>% 
+  tm_map(stemDocument) %>%
+  tm_map(removeWords, c(stopwords('en'),'airbnb','just','can','get','now','hous','also','will','hotel','like','ahm','filippalac'))  
+```
+
+BUILD WESTERN DOCUMNET MATRIX
+```{r}
+#Building term document matrix
+dtm_western <- TermDocumentMatrix(corpus_western)
+dtm_western_a <- as.matrix(dtm_western)
+dtm_western_v <- sort(rowSums(dtm_western_a),decreasing=TRUE)
+dtm_western_d <- data.frame(word=names(dtm_western_v), freq=dtm_western_v)
+head(dtm_western_d,15)
+
+#Plot most frequency words
+barplot(dtm_western_d[1:10,]$freq, las=2,names.arg=dtm_western_d[1:10,]$word,
+        col='lightgreen',main="Top 10 most frequent words",
+        ylab="Word frequencies")
+
+#Generate word cloud
+set.seed(1234)
+wordcloud(words=dtm_western_d$word, freq=dtm_western_d$freq,
+          min.freq = 5,max.words = 100,
+          random.order = FALSE, rot.per = 0.40,
+          colors=brewer.pal(8,"Dark2"))
+```
+
+
+
+
+```{r}
+findAssocs(dtm_western,terms=c("travel","stay","host","book","place","near"),corlimit=0.30)
+```
+
+
+

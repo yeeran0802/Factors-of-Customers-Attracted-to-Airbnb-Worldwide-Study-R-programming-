@@ -1,0 +1,747 @@
+PRICE, HOST, AMENITIES, LOCATION
+
+```{r}
+#Library 
+library(dplyr)
+library(tidytext)
+library(tidyr)
+library(tm)
+library(plotly)
+library(wordcloud)
+library(wordcloud2)
+library(SnowballC)
+library(stringr)
+library(reshape2)
+library(ggplot2) 
+library(NLP) 
+library(RColorBrewer) 
+library(syuzhet)
+```
+
+READ DATASET 
+```{r}
+#read data
+setwd("D:/Users/Acer User/Documents")
+price <- read.csv("price.csv")
+host <- read.csv("host.csv")
+amenities <- read.csv("amenities.csv")
+location<- read.csv("location.csv")
+```
+
+```{r}
+#REMOVE DUPLICATION
+#remove duplication
+distinct(price,.keep_all=TRUE)
+distinct(host,.keep_all=TRUE)
+distinct(amenities,.keep_all=TRUE)
+distinct(location,.keep_all=TRUE)
+
+#To check the number of missing values
+sapply(price, function(x) sum(is.na(x)))
+sapply(host, function(x) sum(is.na(x)))
+sapply(amenities, function(x) sum(is.na(x)))
+sapply(location, function(x) sum(is.na(x)))
+
+```
+SPLIT PRICE INTO ASIAN WESTERN
+```{r}
+price_asian <- subset(price,price$resident=='asian')
+price_west <- subset(price,price$resident=='western')
+```
+
+
+PRICE SENTIMENT
+```{r}
+sentiment_price <-tidytext::unnest_tokens(read.csv("D:/Users/Acer User/Documents/price.csv"), word, Text)
+
+sentiment_price %>%
+  inner_join(get_sentiments("bing")) %>% # pull out only sentiment words
+  count(sentiment) %>% # count of positive & negative words
+  spread(sentiment, n, fill = 0) %>% # made data wide rather than narrow
+  mutate(sentiment = positive - negative) # positive words -  negative words
+# find out most common negative and positive words
+bing_word_counts <- sentiment_price %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+# show the word counts
+bing_word_counts
+# visualize the words by using ggplot
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  top_n(5) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label=n), vjust=-0.2, size=3.0) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(y = "Contribution to sentiment",
+       x = NULL) +
+  coord_flip()
+sentiment_price %>%
+  filter(word != "unknown") %>% 
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("purple", "maroon"),
+                   max.words = 100)
+
+
+```
+
+PRICE ASIAN EMOTION CLASSIFICATION
+```{r}
+#sentiment analysis
+syuzet_price_asian<- get_sentiment(price_asian$Text, method="syuzhet")
+head(syuzet_price_asian)
+#bing
+bing_price_asian<- get_sentiment(price_asian$Text,method="bing")
+head(bing_price_asian)
+#afinn
+afinn_price_asian<- get_sentiment(price_asian$Text,method="afinn")
+#compare first row of each vector using sign function
+rbind(
+  sign(head(syuzet_price_asian)),
+  sign(head(bing_price_asian)),
+  sign(head(afinn_price_asian))
+)
+#Emotion classification
+emotion_price_asian<- get_nrc_sentiment(price_asian$Text)
+head(emotion_price_asian,10)
+
+
+td_price_asian<-data.frame(t(emotion_price_asian))
+td_price_asian_new <- data.frame(rowSums(td_price_asian[1:256]))
+names(td_price_asian_new)[1] <- "count"
+td_price_asian_new <-cbind("sentiment"=rownames(td_price_asian_new),td_price_asian_new)
+rownames(td_price_asian_new) <- NULL
+td_price_asian_new2 <-td_price_asian_new[1:8,]
+quickplot(sentiment, data=td_price_asian_new2, 
+          weight=count, geom="bar",fill="sentiment",
+          ylab="count")+ggtitle("sentiments")
+```
+
+
+PRICE_ASIAN EMOTION SCORE
+```{r}
+anger <- sum(emotion_price_asian$anger)
+anticipation <- sum(emotion_price_asian$anticipation)
+disgust <- sum(emotion_price_asian$disgust)
+fear <- sum(emotion_price_asian$fear)
+joy <- sum(emotion_price_asian$joy)
+sadness <- sum(emotion_price_asian$sadness)
+surprise <- sum(emotion_price_asian$surprise)
+trust <- sum(emotion_price_asian$trust)
+total <- sum(anger,anticipation,disgust,fear,joy,sadness,surprise,trust)
+
+price_asian_anger <- anger/total
+price_asian_anticipation <- anticipation/total
+price_asian_disgust <- disgust/total
+price_asian_fear <- fear/total
+price_asian_joy <- joy/total
+price_asian_sadness <- sadness/total
+price_asian_surprise <- surprise/total
+price_asian_trust <- trust/total
+rbind(price_asian_anger,price_asian_anticipation,price_asian_disgust,
+      price_asian_fear,price_asian_joy,price_asian_sadness,
+      price_asian_surprise,price_asian_trust)
+
+sent_total <- sum(emotion_price_asian$negative,emotion_price_asian$positive)
+pos <- sum(emotion_price_asian$positive)
+neg <- sum(emotion_price_asian$negative)
+price_asian_pos <- pos/sent_total
+price_asian_neg <- neg/sent_total
+rbind(price_asian_pos,price_asian_neg)
+```
+PRICE WESTERN EMOTION CLASSIFICATION
+```{r}
+#sentiment analysis
+syuzet_price_west<- get_sentiment(price_west$Text, method="syuzhet")
+head(syuzet_price_west)
+#bing
+bing_price_west<- get_sentiment(price_west$Text,method="bing")
+head(bing_price_west)
+#afinn
+afinn_price_west<- get_sentiment(price_west$Text,method="afinn")
+#compare first row of each vector using sign function
+rbind(
+  sign(head(syuzet_price_west)),
+  sign(head(bing_price_west)),
+  sign(head(afinn_price_west))
+)
+#Emotion classification
+emotion_price_west<- get_nrc_sentiment(price_west$Text)
+head(emotion_price_west,10)
+
+
+td_price_west<-data.frame(t(emotion_price_west))
+td_price_west_new <- data.frame(rowSums(td_price_west[1:60]))
+names(td_price_west_new)[1] <- "count"
+td_price_west_new <-cbind("sentiment"=rownames(td_price_west_new),td_price_west_new)
+rownames(td_price_west_new) <- NULL
+td_price_west_new2 <-td_price_west_new[1:8,]
+quickplot(sentiment, data=td_price_west_new2, 
+          weight=count, geom="bar",fill="sentiment",
+          ylab="count")+ggtitle("sentiments")
+```
+
+
+PRICE_WESTERN EMOTION SCORE
+```{r}
+anger <- sum(emotion_price_west$anger)
+anticipation <- sum(emotion_price_west$anticipation)
+disgust <- sum(emotion_price_west$disgust)
+fear <- sum(emotion_price_west$fear)
+joy <- sum(emotion_price_west$joy)
+sadness <- sum(emotion_price_west$sadness)
+surprise <- sum(emotion_price_west$surprise)
+trust <- sum(emotion_price_west$trust)
+total <- sum(anger,anticipation,disgust,fear,joy,sadness,surprise,trust)
+
+price_west_anger <- anger/total
+price_west_anticipation <- anticipation/total
+price_west_disgust <- disgust/total
+price_west_fear <- fear/total
+price_west_joy <- joy/total
+price_west_sadness <- sadness/total
+price_west_surprise <- surprise/total
+price_west_trust <- trust/total
+rbind(price_west_anger,price_west_anticipation,price_west_disgust,
+      price_west_fear,price_west_joy,price_west_sadness,
+      price_west_surprise,price_west_trust)
+
+sent_total <- sum(emotion_price_west$negative,emotion_price_west$positive)
+pos <- sum(emotion_price_west$positive)
+neg <- sum(emotion_price_west$negative)
+price_west_pos <- pos/sent_total
+price_west_neg <- neg/sent_total
+rbind(price_west_pos,price_west_neg)
+```
+
+
+
+HOST SENTIMENT
+```{r}
+sentiment_host <-tidytext::unnest_tokens(read.csv("D:/Users/Acer User/Documents/host.csv"), word, Text)
+
+sentiment_host %>%
+  inner_join(get_sentiments("bing")) %>% # pull out only sentiment words
+  count(sentiment) %>% # count of positive & negative words
+  spread(sentiment, n, fill = 0) %>% # made data wide rather than narrow
+  mutate(sentiment = positive - negative) # positive words -  negative words
+# find out most common negative and positive words
+bing_word_counts <- sentiment_host  %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+# show the word counts
+bing_word_counts
+# visualize the words by using ggplot
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  top_n(5) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label=n), vjust=-0.2, size=3.0) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(y = "Contribution to sentiment",
+       x = NULL) +
+  coord_flip()
+sentiment_host %>%
+  filter(word != "unknown") %>% 
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("purple", "maroon"),
+                   max.words = 100)
+```
+
+SPLIT HOST INTO ASIAN WESTERN
+```{r}
+host_asian <- subset(host, host$resident=='asian')
+host_west <- subset(host, host$resident=='western')
+```
+
+
+HOST ASIAN EMOTION
+```{r}
+#sentiment analysis
+syuzet_host_asian<- get_sentiment(host_asian$Text, method="syuzhet")
+head(syuzet_host_asian)
+#bing
+bing_host_asian <- get_sentiment(host_asian$Text,method="bing")
+head(bing_host_asian)
+#afinn
+afinn_host_asian <- get_sentiment(host_asian$Text,method="afinn")
+#compare first row of each vector using sign function
+rbind(
+  sign(head(syuzet_host_asian)),
+  sign(head(bing_host_asian)),
+  sign(head(afinn_host_asian))
+)
+#Emotion classification
+emotion_host_asian <- get_nrc_sentiment(host_asian$Text)
+head(emotion_host_asian,10)
+
+td_host_asian <-data.frame(t(emotion_host_asian))
+td_host_asian_new <- data.frame(rowSums(td_host_asian[1:97]))
+names(td_host_asian_new)[1] <- "count"
+td_host_asian_new <-cbind("sentiment"=rownames(td_host_asian_new),td_host_asian_new)
+rownames(td_host_asian_new) <- NULL
+td_host_asian_new2 <-td_host_asian_new[1:6,]
+td_host_asian_new2 <-td_host_asian_new[1:8,]
+quickplot(sentiment, data=td_host_asian_new2, 
+          weight=count, geom="bar",fill="sentiment",
+          ylab="count")+ggtitle("sentiments")
+
+
+```
+HOST_ASIAN EMOTION SCORE
+
+```{r}
+anger <- sum(emotion_host_asian$anger)
+anticipation <- sum(emotion_host_asian$anticipation)
+disgust <- sum(emotion_host_asian$disgust)
+fear <- sum(emotion_host_asian$fear)
+joy <- sum(emotion_host_asian$joy)
+sadness <- sum(emotion_host_asian$sadness)
+surprise <- sum(emotion_host_asian$surprise)
+trust <- sum(emotion_host_asian$trust)
+total <- sum(anger,anticipation,disgust,fear,joy,sadness,surprise,trust)
+
+host_asian_anger <- anger/total
+host_asian_anticipation <- anticipation/total
+host_asian_disgust <- disgust/total
+host_asian_fear <- fear/total
+host_asian_joy <- joy/total
+host_asian_sadness <- sadness/total
+host_asian_surprise <- surprise/total
+host_asian_trust <- trust/total
+rbind(host_asian_anger,host_asian_anticipation,host_asian_disgust,
+      host_asian_fear,host_asian_joy,host_asian_sadness,
+      host_asian_surprise,host_asian_trust)
+
+sent_total <- sum(emotion_host_asian$negative,emotion_host_asian$positive)
+pos <- sum(emotion_host_asian$positive)
+neg <- sum(emotion_host_asian$negative)
+host_asian_pos <- pos/sent_total
+host_asian_neg <- neg/sent_total
+rbind(host_asian_pos,host_asian_neg)
+```
+
+
+HOST WESTERN EMOTION
+```{r}
+#sentiment analysis
+syuzet_host_west<- get_sentiment(host_west$Text, method="syuzhet")
+head(syuzet_host_west)
+#bing
+bing_host_west <- get_sentiment(host_west$Text,method="bing")
+head(bing_host_west)
+#afinn
+afinn_host_west <- get_sentiment(host_west$Text,method="afinn")
+#compare first row of each vector using sign function
+rbind(
+  sign(head(syuzet_host_west)),
+  sign(head(bing_host_west)),
+  sign(head(afinn_host_west))
+)
+#Emotion classification
+emotion_host_west <- get_nrc_sentiment(host_west$Text)
+head(emotion_host_west,10)
+
+td_host_west <-data.frame(t(emotion_host_west))
+td_host_west_new <- data.frame(rowSums(td_host_west[1:425]))
+names(td_host_west_new)[1] <- "count"
+td_host_west_new <-cbind("sentiment"=rownames(td_host_west_new),td_host_west_new)
+rownames(td_host_west_new) <- NULL
+td_host_west_new2 <-td_host_west_new[1:6,]
+td_host_west_new2 <-td_host_west_new[1:8,]
+quickplot(sentiment, data=td_host_west_new2, 
+          weight=count, geom="bar",fill="sentiment",
+          ylab="count")+ggtitle("sentiments")
+
+
+```
+
+HOST_WESTERN EMOTION SCORE
+
+```{r}
+anger <- sum(emotion_host_west$anger)
+anticipation <- sum(emotion_host_west$anticipation)
+disgust <- sum(emotion_host_west$disgust)
+fear <- sum(emotion_host_west$fear)
+joy <- sum(emotion_host_west$joy)
+sadness <- sum(emotion_host_west$sadness)
+surprise <- sum(emotion_host_west$surprise)
+trust <- sum(emotion_host_west$trust)
+total <- sum(anger,anticipation,disgust,fear,joy,sadness,surprise,trust)
+
+host_west_anger <- anger/total
+host_west_anticipation <- anticipation/total
+host_west_disgust <- disgust/total
+host_west_fear <- fear/total
+host_west_joy <- joy/total
+host_west_sadness <- sadness/total
+host_west_surprise <- surprise/total
+host_west_trust <- trust/total
+rbind(host_west_anger,host_west_anticipation,host_west_disgust,
+      host_west_fear,host_west_joy,host_west_sadness,
+      host_west_surprise,host_west_trust)
+
+sent_total <- sum(emotion_host_west$negative,emotion_host_west$positive)
+pos <- sum(emotion_host_west$positive)
+neg <- sum(emotion_host_west$negative)
+host_west_pos <- pos/sent_total
+host_west_neg <- neg/sent_total
+rbind(host_west_pos,host_west_neg)
+```
+
+AMENITIES SENTIMENT ANALYSIS
+```{r}
+sentiment_amenities <-tidytext::unnest_tokens(read.csv("D:/Users/Acer User/Documents/amenities.csv"), word, Text)
+
+sentiment_amenities %>%
+  inner_join(get_sentiments("bing")) %>% # pull out only sentiment words
+  count(sentiment) %>% # count of positive & negative words
+  spread(sentiment, n, fill = 0) %>% # made data wide rather than narrow
+  mutate(sentiment = positive - negative) # positive words -  negative words
+# find out most common negative and positive words
+bing_word_counts <- sentiment_amenities %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+# show the word counts
+bing_word_counts
+# visualize the words by using ggplot
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  top_n(5) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label=n), vjust=-0.2, size=3.0) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(y = "Contribution to sentiment",
+       x = NULL) +
+  coord_flip()
+sentiment_amenities %>%
+  filter(word != "unknown") %>% 
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("purple", "maroon"),
+                   max.words = 100)
+```
+
+SPLIT AMENITIES INTO ASIAN WESTERN
+```{r}
+amenities_asian <- subset(amenities,amenities$resident=='asian')
+amenities_west <- subset(amenities,amenities$resident=='western')
+```
+
+
+AMENITIES ASIAN EMOTION
+```{r}
+#sentiment analysis
+syuzet_amenities_asian <- get_sentiment(amenities_asian$Text, method="syuzhet")
+head(syuzet_amenities_asian)
+#bing
+bing_amenities_asian<- get_sentiment(amenities_asian$Text,method="bing")
+head(bing_amenities_asian)
+#afinn
+afinn_amenities_asian <- get_sentiment(amenities_asian$Text,method="afinn")
+#compare first row of each vector using sign function
+rbind(
+  sign(head(syuzet_amenities_asian)),
+  sign(head(bing_amenities_asian)),
+  sign(head(afinn_amenities_asian))
+)
+#Emotion classification
+emotion_amenities_asian <- get_nrc_sentiment(amenities_asian$Text)
+head(emotion_amenities_asian,10)
+
+td_amenities_asian <-data.frame(t(emotion_amenities_asian))
+td_amenities_asian_new <- data.frame(rowSums(td_amenities_asian[1:240]))
+names(td_amenities_asian_new)[1] <- "count"
+td_amenities_asian_new <-cbind("sentiment"=rownames(td_amenities_asian_new),td_amenities_asian_new)
+rownames(td_amenities_asian_new) <- NULL
+td_amenities_asian_new2 <-td_amenities_asian_new[1:6,]
+td_amenities_asian_new2 <-td_amenities_asian_new[1:8,]
+quickplot(sentiment, data=td_amenities_asian_new2, 
+          weight=count, geom="bar",fill="sentiment",
+          ylab="count")+ggtitle("sentiments")
+```
+
+AMENITIES_ASIAN EMOTION SCORE
+```{r}
+anger <- sum(emotion_amenities_asian$anger)
+anticipation <- sum(emotion_amenities_asian$anticipation)
+disgust <- sum(emotion_amenities_asian$disgust)
+fear <- sum(emotion_amenities_asian$fear)
+joy <- sum(emotion_amenities_asian$joy)
+sadness <- sum(emotion_amenities_asian$sadness)
+surprise <- sum(emotion_amenities_asian$surprise)
+trust <- sum(emotion_amenities_asian$trust)
+total <- sum(anger,anticipation,disgust,fear,joy,sadness,surprise,trust)
+
+amenities_asian_anger <- anger/total
+amenities_asian_anticipation <- anticipation/total
+amenities_asian_disgust <- disgust/total
+amenities_asian_fear <- fear/total
+amenities_asian_joy <- joy/total
+amenities_asian_sadness <- sadness/total
+amenities_asian_surprise <- surprise/total
+amenities_asian_trust <- trust/total
+rbind(amenities_asian_anger,amenities_asian_anticipation,amenities_asian_disgust,
+      amenities_asian_fear,amenities_asian_joy,amenities_asian_sadness,
+      amenities_asian_surprise,amenities_asian_trust)
+
+sent_total <- sum(emotion_amenities_asian$negative,emotion_amenities_asian$positive)
+pos <- sum(emotion_amenities_asian$positive)
+neg <- sum(emotion_amenities_asian$negative)
+amenities_asian_pos <- pos/sent_total
+amenities_asian_neg <- neg/sent_total
+rbind(amenities_asian_pos,amenities_asian_neg)
+```
+
+AMENITIES WESTERN EMOTION
+```{r}
+#sentiment analysis
+syuzet_amenities_west <- get_sentiment(amenities_west$Text, method="syuzhet")
+head(syuzet_amenities_west)
+#bing
+bing_amenities_west<- get_sentiment(amenities_west$Text,method="bing")
+head(bing_amenities_west)
+#afinn
+afinn_amenities_west <- get_sentiment(amenities_west$Text,method="afinn")
+#compare first row of each vector using sign function
+rbind(
+  sign(head(syuzet_amenities_west)),
+  sign(head(bing_amenities_west)),
+  sign(head(afinn_amenities_west))
+)
+#Emotion classification
+emotion_amenities_west <- get_nrc_sentiment(amenities_west$Text)
+head(emotion_amenities_west,10)
+
+td_amenities_west <-data.frame(t(emotion_amenities_west))
+td_amenities_west_new <- data.frame(rowSums(td_amenities_west[1:16]))
+names(td_amenities_west_new)[1] <- "count"
+td_amenities_west_new <-cbind("sentiment"=rownames(td_amenities_west_new),td_amenities_west_new)
+rownames(td_amenities_west_new) <- NULL
+td_amenities_west_new2 <-td_amenities_west_new[1:6,]
+td_amenities_west_new2 <-td_amenities_west_new[1:8,]
+quickplot(sentiment, data=td_amenities_west_new2, 
+          weight=count, geom="bar",fill="sentiment",
+          ylab="count")+ggtitle("sentiments")
+```
+
+AMENITIES_WESTERN EMOTION SCORE
+```{r}
+anger <- sum(emotion_amenities_west$anger)
+anticipation <- sum(emotion_amenities_west$anticipation)
+disgust <- sum(emotion_amenities_west$disgust)
+fear <- sum(emotion_amenities_west$fear)
+joy <- sum(emotion_amenities_west$joy)
+sadness <- sum(emotion_amenities_west$sadness)
+surprise <- sum(emotion_amenities_west$surprise)
+trust <- sum(emotion_amenities_west$trust)
+total <- sum(anger,anticipation,disgust,fear,joy,sadness,surprise,trust)
+
+amenities_west_anger <- anger/total
+amenities_west_anticipation <- anticipation/total
+amenities_west_disgust <- disgust/total
+amenities_west_fear <- fear/total
+amenities_west_joy <- joy/total
+amenities_west_sadness <- sadness/total
+amenities_west_surprise <- surprise/total
+amenities_west_trust <- trust/total
+rbind(amenities_west_anger,amenities_west_anticipation,amenities_west_disgust,
+      amenities_west_fear,amenities_west_joy,amenities_west_sadness,
+      amenities_west_surprise,amenities_west_trust)
+
+sent_total <- sum(emotion_amenities_west$negative,emotion_amenities_west$positive)
+pos <- sum(emotion_amenities_west$positive)
+neg <- sum(emotion_amenities_west$negative)
+amenities_west_pos <- pos/sent_total
+amenities_west_neg <- neg/sent_total
+rbind(amenities_west_pos,amenities_west_neg)
+```
+
+LOCATION SENTIMENT ANALYSIS
+```{r}
+sentiment_location <-tidytext::unnest_tokens(read.csv("D:/Users/Acer User/Documents/location.csv"), word, Text)
+
+sentiment_location %>%
+  inner_join(get_sentiments("bing")) %>% # pull out only sentiment words
+  count(sentiment) %>% # count of positive & negative words
+  spread(sentiment, n, fill = 0) %>% # made data wide rather than narrow
+  mutate(sentiment = positive - negative) # positive words -  negative words
+# find out most common negative and positive words
+bing_word_counts <- sentiment_location %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+# show the word counts
+bing_word_counts
+# visualize the words by using ggplot
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  top_n(5) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label=n), vjust=-0.2, size=3.0) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(y = "Contribution to sentiment",
+       x = NULL) +
+  coord_flip()
+sentiment_location %>%
+  filter(word != "unknown") %>% 
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("purple", "maroon"),
+                   max.words = 100)
+```
+SPLIT LOCATION INTO ASIAN WESTERN
+```{r}
+location_asian <- subset(location, location$resident=='asian')
+location_west <- subset(location, location$resident=='western')
+```
+
+
+
+LOCATION ASIAN EMOTION
+```{r}
+#sentiment analysis
+syuzet_location_asian <- get_sentiment(location_asian$Text, method="syuzhet")
+head(syuzet_location_asian)
+#bing
+bing_location_asian<- get_sentiment(location_asian$Text,method="bing")
+head(bing_location_asian)
+#afinn
+afinn_location_asian<- get_sentiment(location_asian$Text,method="afinn")
+#compare first row of each vector using sign function
+rbind(
+  sign(head(syuzet_location_asian)),
+  sign(head(bing_location_asian)),
+  sign(head(afinn_location_asian))
+)
+#Emotion classification
+emotion_location_asian <- get_nrc_sentiment(location_asian$Text)
+head(emotion_location_asian,10)
+
+td_location_asian <-data.frame(t(emotion_location_asian))
+td_location_asian_new <- data.frame(rowSums(td_location_asian[1:166]))
+names(td_location_asian_new)[1] <- "count"
+td_location_asian_new <-cbind("sentiment"=rownames(td_location_asian_new),td_location_asian_new)
+rownames(td_location_asian_new) <- NULL
+td_location_asian_new2 <-td_location_asian_new[1:6,]
+td_location_asian_new2 <-td_location_asian_new[1:8,]
+quickplot(sentiment, data=td_location_asian_new2, 
+          weight=count, geom="bar",fill="sentiment",
+          ylab="count")+ggtitle("sentiments")
+```
+
+
+LOCATION_ASIAN EMOTION SCORE
+```{r}
+anger <- sum(emotion_location_asian$anger)
+anticipation <- sum(emotion_location_asian$anticipation)
+disgust <- sum(emotion_location_asian$disgust)
+fear <- sum(emotion_location_asian$fear)
+joy <- sum(emotion_location_asian$joy)
+sadness <- sum(emotion_location_asian$sadness)
+surprise <- sum(emotion_location_asian$surprise)
+trust <- sum(emotion_location_asian$trust)
+total <- sum(anger,anticipation,disgust,fear,joy,sadness,surprise,trust)
+
+location_asian_anger <- anger/total
+location_asian_anticipation <- anticipation/total
+location_asian_disgust <- disgust/total
+location_asian_fear <- fear/total
+location_asian_joy <- joy/total
+location_asian_sadness <- sadness/total
+location_asian_surprise <- surprise/total
+location_asian_trust <- trust/total
+rbind(location_asian_anger,location_asian_anticipation,location_asian_disgust,
+      location_asian_fear,location_asian_joy,location_asian_sadness,
+      location_asian_surprise,location_asian_trust)
+sent_total <- sum(emotion_location_asian$negative,emotion_location_asian$positive)
+pos <- sum(emotion_location_asian$positive)
+neg <- sum(emotion_location_asian$negative)
+location_asian_pos <- pos/sent_total
+location_asian_neg <- neg/sent_total
+rbind(location_asian_pos,location_asian_neg)
+```
+
+LOCATION WESTERN EMOTION
+```{r}
+#sentiment analysis
+syuzet_location_west<- get_sentiment(location_west$Text, method="syuzhet")
+head(syuzet_location_west)
+#bing
+bing_location_west<- get_sentiment(location_west$Text,method="bing")
+head(bing_location_west)
+#afinn
+afinn_location_west<- get_sentiment(location_west$Text,method="afinn")
+#compare first row of each vector using sign function
+rbind(
+  sign(head(syuzet_location_west)),
+  sign(head(bing_location_west)),
+  sign(head(afinn_location_west))
+)
+#Emotion classification
+emotion_location_west <- get_nrc_sentiment(location_west$Text)
+head(emotion_location_west,10)
+
+td_location_west <-data.frame(t(emotion_location_west))
+td_location_west_new <- data.frame(rowSums(td_location_west[1:183]))
+names(td_location_west_new)[1] <- "count"
+td_location_west_new <-cbind("sentiment"=rownames(td_location_west_new),td_location_west_new)
+rownames(td_location_west_new) <- NULL
+td_location_west_new2 <-td_location_west_new[1:6,]
+td_location_west_new2 <-td_location_west_new[1:8,]
+quickplot(sentiment, data=td_location_west_new2, 
+          weight=count, geom="bar",fill="sentiment",
+          ylab="count")+ggtitle("sentiments")
+```
+
+
+LOCATION_WESTERN EMOTION SCORE
+```{r}
+anger <- sum(emotion_location_west$anger)
+anticipation <- sum(emotion_location_west$anticipation)
+disgust <- sum(emotion_location_west$disgust)
+fear <- sum(emotion_location_west$fear)
+joy <- sum(emotion_location_west$joy)
+sadness <- sum(emotion_location_west$sadness)
+surprise <- sum(emotion_location_west$surprise)
+trust <- sum(emotion_location_west$trust)
+total <- sum(anger,anticipation,disgust,fear,joy,sadness,surprise,trust)
+
+location_west_anger <- anger/total
+location_west_anticipation <- anticipation/total
+location_west_disgust <- disgust/total
+location_west_fear <- fear/total
+location_west_joy <- joy/total
+location_west_sadness <- sadness/total
+location_west_surprise <- surprise/total
+location_west_trust <- trust/total
+rbind(location_west_anger,location_west_anticipation,location_west_disgust,
+      location_west_fear,location_west_joy,location_west_sadness,
+      location_west_surprise,location_west_trust)
+sent_total <- sum(emotion_location_west$negative,emotion_location_west$positive)
+pos <- sum(emotion_location_west$positive)
+neg <- sum(emotion_location_west$negative)
+location_west_pos <- pos/sent_total
+location_west_neg <- neg/sent_total
+rbind(location_west_pos,location_west_neg)
+```
